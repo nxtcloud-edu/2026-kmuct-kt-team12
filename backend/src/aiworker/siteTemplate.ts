@@ -14,6 +14,16 @@ export interface SiteData {
   records: RecordItem[];
 }
 
+function safeHttpUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const CSS = `
 :root{--ink:#1a1a1a;--muted:#6b7280;--line:#e3e6ea;--accent:#2f6feb;--soft:#eaf1fe;--warn:#b9770e;--warn-soft:#fdf3e2}
 *{box-sizing:border-box}
@@ -63,8 +73,9 @@ export function renderSite(data: SiteData): string {
   const activitiesHtml = content.activities
     .map((a) => {
       const rec = recById.get(a.recordId);
-      const link = rec?.url
-        ? `<a class="origin" href="${escape(rec.url)}" target="_blank" rel="noopener">원본 보기</a>`
+      const recUrl = safeHttpUrl(rec?.url);
+      const link = recUrl
+        ? `<a class="origin" href="${escape(recUrl)}" target="_blank" rel="noopener">원본 보기</a>`
         : '';
       const bullets = a.bullets.map((b) => `<li>${escape(b)}</li>`).join('\n');
       return `<div class="activity">
@@ -107,8 +118,9 @@ function renderExp(e: Experience, recById: Map<string, RecordItem>): string {
   if (e.origin === 'answer') {
     return `<li>${escape(e.text)} <span class="badge">본인 확인</span></li>`;
   }
-const link = rec?.url && /^https?:\/\//i.test(rec.url)
-    ? ` <a class="src" href="${escape(rec.url)}" target="_blank" rel="noopener">원본</a>`
+  const recUrl = e.recordIds.map((id) => safeHttpUrl(recById.get(id)?.url)).find((url): url is string => !!url);
+  const link = recUrl
+    ? ` <a class="src" href="${escape(recUrl)}" target="_blank" rel="noopener">원본</a>`
     : '';
   return `<li>${escape(e.text)}${link}</li>`;
 }
