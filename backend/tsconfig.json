@@ -7,14 +7,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "outDir": "dist",
-    "rootDir": "..",
-    "types": ["node"],
-    "paths": {
-      "@shared/types": ["../shared/types.ts"],
-      "@shared/validators": ["../shared/validators.ts"]
-    }
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "../shared/types.ts", "../shared/validators.ts"]
+  "include": ["src/**/*.ts", "scripts/**/*.mjs"]
 }
