@@ -53,9 +53,9 @@ export function renderSite(data: SiteData): string {
   const expById = new Map(data.experiences.map((e) => [e.id, e]));
   const recById = new Map(data.records.map((r) => [r.id, r]));
 
-  const introHtml = content.intro.map((p) => `<p>${escape(p)}</p>`).join('\n');
+  const introHtml = (content.intro ?? []).map((p) => `<p>${escape(p)}</p>`).join('\n');
 
-  const skillsHtml = content.skills
+  const skillsHtml = (content.skills ?? [])
     .map((s) => {
       const kw = data.keywords.find((k) => k.id === s.keywordId);
       if (!kw) return '';
@@ -70,7 +70,7 @@ export function renderSite(data: SiteData): string {
     })
     .join('\n');
 
-  const activitiesHtml = content.activities
+  const activitiesHtml = (content.activities ?? [])
     .map((a) => {
       const rec = recById.get(a.recordId);
       const recUrl = safeHttpUrl(rec?.url);
