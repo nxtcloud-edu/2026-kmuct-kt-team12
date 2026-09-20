@@ -1,231 +1,131 @@
-// src/api.ts
-// API 클라이언트. shared/types.ts 타입으로 응답을 다룬다.
-// 환경 플래그(VITE_USE_MOCK)로 목(fixtures)↔실제(fetch) 전환. 기본은 목(AWS 없이 동작).
+// frontend/src/api.ts
+// 모든 API 호출은 이 파일에만. VITE_USE_MOCK이 "true"면 src/mocks의 가짜 api로 교체.
+// 로컬 기본은 mock.
 
 import type {
-    Source,
-    Artifact,
-    Evidence,
-    MasterOutput,
-    TailoredOutput,
-    Run,
-    MatchSession,
-} from '@shared/types';
-import {
-    fixtureArtifacts,
-    fixtureEvidence,
-    fixtureMaster,
-    fixtureTailored,
-    fixtureSources,
-    fixtureRunDone,
-} from './fixtures';
+  Connections,
+  Job,
+  JobKind,
+  Keyword,
+  Experience,
+  Question,
+  RecordItem,
+  SiteInfo,
+} from './types';
+import { mockApi } from './mocks/mockApi';
 
-export interface PortfolioView {
-    sources: Source[];
-    master: MasterOutput | null;
-    evidence: Evidence[];
-}
-
-export interface TailoredSummary {
-    id: string;
-    targetRole: string;
-    generatedAt: string;
-    stale: boolean;
+export interface VerifyResult {
+  github?: 'ok' | 'fail';
+  notion?: 'ok' | 'fail';
+  tistory?: 'ok' | 'fail';
 }
 
 export interface Api {
-    createPortfolio(): Promise<string>;
-    getPortfolio(id: string): Promise<PortfolioView>;
-    addSource(id: string, input: { kind: Source['kind']; url?: string; fileName?: string; contentType?: string }): Promise<{ source: Source; uploadUrl?: string }>;
-    deleteSource(id: string, sourceId: string): Promise<void>;
-    startRun(id: string, mode: 'build' | 'refresh'): Promise<string>;
-    getRun(runId: string): Promise<Run>;
-    patchEntry(id: string, activityId: string, patch: Record<string, unknown>): Promise<void>;
-    createOutput(id: string, input: { targetRole: string; jdText?: string; activityIds: string[] }): Promise<string>;
-    listOutputs(id: string): Promise<TailoredSummary[]>;
-    getOutput(outputId: string): Promise<TailoredOutput>;
-    /** 근거 추적: artifact 원문을 얻는다(목 전용/데모). 실제는 getPortfolio 응답에 포함하거나 별도 조회. */
-    getArtifacts(id: string): Promise<Artifact[]>;
-    /** 맞춤본을 정적 HTML 웹사이트로 발행한다. */
-    publishOutput(id: string, outputId: string): Promise<{ url: string }>;
-    /** 경험 매칭 세션을 시작한다 (질문 생성). */
-    startMatch(id: string): Promise<string>;
-    /** 매칭 세션 상태를 조회한다. */
-    getMatch(id: string, sessionId: string): Promise<MatchSession>;
-    /** 매칭 질문에 답변한다. */
-    answerMatch(id: string, sessionId: string, questionId: string, confirmed: boolean, answer?: string): Promise<MatchSession>;
+  createSession(): Promise<string>;
+  verifyConnections(sessionId: string, conn: Connections): Promise<VerifyResult>;
+  startJob(sessionId: string, kind: JobKind, connections?: Connections): Promise<string>;
+  getJob(jobId: string): Promise<Job>;
+  getRecords(sessionId: string): Promise<RecordItem[]>;
+  patchRecord(sessionId: string, recordId: string, excluded: boolean): Promise<RecordItem>;
+  getKeywords(sessionId: string): Promise<{ keywords: Keyword[]; experiences: Experience[] }>;
+  getQuestions(sessionId: string): Promise<Question[]>;
+  answerQuestion(
+    sessionId: string,
+    qid: string,
+    answer: 'yes' | 'no' | 'skip',
+    detail?: string,
+  ): Promise<Question>;
+  getSite(sessionId: string): Promise<SiteInfo | null>;
 }
 
-// ---------- 목 구현 ----------
-// 목 매칭 세션 저장소
-const mockMatchSessions = new Map<string, MatchSession>();
-
-function delay<T>(v: T, ms = 120): Promise<T> {
-    return new Promise((r) => setTimeout(() => r(v), ms));
+// 에러 응답 { error: { code, message } } 를 던진다.
+export class ApiError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
 }
 
-export function createMockApi(): Api {
-    // 데모 상태(메모리). 실제 백엔드 없이 화면 흐름을 흉내낸다.
-    const master = structuredClone(fixtureMaster);
-    let outputs: TailoredOutput[] = [structuredClone(fixtureTailored)];
-    const sources = structuredClone(fixtureSources);
+const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '');
 
-    return {
-        async createPortfolio() {
-            return delay('pf-demo');
-        },
-        async getPortfolio() {
-            return delay({ sources, master, evidence: structuredClone(fixtureEvidence) });
-        },
-        async addSource(_id, input) {
-            const src: Source = {
-                id: `src-${Date.now()}`,
-                portfolioId: 'pf-demo',
-                kind: input.kind,
-                ...(input.url ? { url: input.url } : {}),
-                ...(input.fileName ? { fileName: input.fileName } : {}),
-                addedAt: new Date().toISOString(),
-            };
-            sources.push(src);
-            return delay({ source: src, ...(input.kind === 'file' ? { uploadUrl: `memory://upload/${src.id}` } : {}) });
-        },
-        async deleteSource(_id, sourceId) {
-            const i = sources.findIndex((s) => s.id === sourceId);
-            if (i >= 0) sources.splice(i, 1);
-            return delay(undefined);
-        },
-        async startRun() {
-            return delay('run-demo');
-        },
-        async getRun() {
-            return delay(structuredClone(fixtureRunDone));
-        },
-        async patchEntry(_id, activityId, patch) {
-            const e = master.entries.find((x) => x.activityId === activityId);
-            if (e) {
-                Object.assign(e, patch);
-                const changed = Object.keys(patch).filter((k) => k !== 'lockedFields');
-                e.lockedFields = [...new Set([...e.lockedFields, ...changed])];
-            }
-            return delay(undefined);
-        },
-        async createOutput(_id, input) {
-            const out = structuredClone(fixtureTailored);
-            out.id = `out-${Date.now()}`;
-            out.targetRole = input.targetRole;
-            if (input.jdText) out.jdText = input.jdText;
-            outputs = [out, ...outputs];
-            return delay(out.id);
-        },
-        async listOutputs() {
-            return delay(
-                outputs.map((o) => ({
-                    id: o.id,
-                    targetRole: o.targetRole,
-                    generatedAt: o.generatedAt,
-                    stale: master.generatedAt > o.basedOnMasterAt,
-                })),
-            );
-        },
-        async getOutput(outputId) {
-            const o = outputs.find((x) => x.id === outputId) ?? outputs[0];
-            return delay(structuredClone(o));
-        },
-        async getArtifacts() {
-            return delay(structuredClone(fixtureArtifacts));
-        },
-        async publishOutput(_id, outputId) {
-            return delay({ url: `https://portfolio-demo.s3.amazonaws.com/published/pf-demo/${outputId}/index.html` });
-        },
-        // ---------- 경험 매칭 (목 구현) ----------
-        async startMatch() {
-            const sessionId = `ms-${Date.now()}`;
-            const mockQuestions: MatchSession['questions'] = [
-                { id: 'mq-1', activityId: 'act-crawler', question: '웹 크롤러에서 Database를 사용한 경험이 있나요?', suggestedKeyword: 'Database 구현', status: 'pending' },
-                { id: 'mq-2', activityId: 'act-crawler', question: 'Docker 등 컨테이너 환경에서 배포한 경험이 있나요?', suggestedKeyword: 'Docker 배포', status: 'pending' },
-                { id: 'mq-3', activityId: 'act-study', question: '스터디에서 코드 리뷰를 진행한 경험이 있나요?', suggestedKeyword: '코드 리뷰', status: 'pending' },
-                { id: 'mq-4', activityId: 'act-study', question: '스터디 결과물을 블로그나 깃허브에 정리한 경험이 있나요?', suggestedKeyword: '기술 블로그', status: 'pending' },
-                { id: 'mq-5', activityId: 'act-payment', question: '결제 모듈에서 보안(인증/암호화)을 적용한 경험이 있나요?', suggestedKeyword: '보안 적용', status: 'pending' },
-                { id: 'mq-6', activityId: 'act-payment', question: '프론트엔드에서 사용한 상태관리 라이브러리가 있나요?', suggestedKeyword: '상태관리', status: 'pending' },
-            ];
-            mockMatchSessions.set(sessionId, {
-                id: sessionId,
-                portfolioId: 'pf-demo',
-                questions: mockQuestions,
-                status: 'active',
-                createdAt: new Date().toISOString(),
-            });
-            return delay(sessionId);
-        },
-        async getMatch(_id, sessionId) {
-            const session = mockMatchSessions.get(sessionId);
-            if (!session) throw new Error('세션 없음');
-            return delay(structuredClone(session));
-        },
-        async answerMatch(_id, sessionId, questionId, confirmed, answer) {
-            const session = mockMatchSessions.get(sessionId);
-            if (!session) throw new Error('세션 없음');
-            const q = session.questions.find((x) => x.id === questionId);
-            if (!q) throw new Error('질문 없음');
-            q.status = confirmed ? 'confirmed' : 'denied';
-            if (confirmed && answer) q.userAnswer = answer;
-            if (session.questions.every((x) => x.status !== 'pending')) session.status = 'done';
-            return delay(structuredClone(session));
-        },
-    };
+async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: body !== undefined ? { 'content-type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError('network', '서버에 연결할 수 없습니다.', 0);
+  }
+  const text = await res.text();
+  const data = text ? safeParse(text) : undefined;
+  if (!res.ok) {
+    const err = (data as { error?: { code?: string; message?: string } })?.error;
+    throw new ApiError(err?.code ?? 'error', err?.message ?? '요청에 실패했습니다.', res.status);
+  }
+  return data as T;
 }
 
-// ---------- 실제(fetch) 구현 ----------
-export function createHttpApi(baseUrl: string): Api {
-    async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-        const res = await fetch(`${baseUrl}${path}`, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            ...(body ? { body: JSON.stringify(body) } : {}),
-        });
-        if (!res.ok) throw new Error(`${method} ${path} 실패: ${res.status}`);
-        if (res.status === 204) return undefined as T;
-        return (await res.json()) as T;
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+const realApi: Api = {
+  async createSession() {
+    const r = await req<{ sessionId: string }>('POST', '/sessions');
+    return r.sessionId;
+  },
+  verifyConnections(sessionId, conn) {
+    return req<VerifyResult>('POST', `/sessions/${sessionId}/connections/verify`, conn);
+  },
+  async startJob(sessionId, kind, connections) {
+    const r = await req<{ jobId: string }>('POST', `/sessions/${sessionId}/jobs`, {
+      kind,
+      ...(connections ? { connections } : {}),
+    });
+    return r.jobId;
+  },
+  getJob(jobId) {
+    return req<Job>('GET', `/jobs/${jobId}`);
+  },
+  getRecords(sessionId) {
+    return req<RecordItem[]>('GET', `/sessions/${sessionId}/records`);
+  },
+  patchRecord(sessionId, recordId, excluded) {
+    return req<RecordItem>('PATCH', `/sessions/${sessionId}/records/${recordId}`, { excluded });
+  },
+  getKeywords(sessionId) {
+    return req('GET', `/sessions/${sessionId}/keywords`);
+  },
+  getQuestions(sessionId) {
+    return req<Question[]>('GET', `/sessions/${sessionId}/questions`);
+  },
+  answerQuestion(sessionId, qid, answer, detail) {
+    return req<Question>('POST', `/sessions/${sessionId}/questions/${qid}/answer`, {
+      answer,
+      ...(detail ? { detail } : {}),
+    });
+  },
+  async getSite(sessionId) {
+    try {
+      return await req<SiteInfo>('GET', `/sessions/${sessionId}/site`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
     }
-    return {
-        async createPortfolio() {
-            return (await req<{ portfolioId: string }>('POST', '/portfolios')).portfolioId;
-        },
-        getPortfolio: (id) => req('GET', `/portfolios/${id}`),
-        addSource: (id, input) => req('POST', `/portfolios/${id}/sources`, input),
-        deleteSource: (id, sourceId) => req('DELETE', `/portfolios/${id}/sources/${sourceId}`),
-        async startRun(id, mode) {
-            return (await req<{ runId: string }>('POST', `/portfolios/${id}/runs`, { mode })).runId;
-        },
-        getRun: (runId) => req('GET', `/runs/${runId}`),
-        patchEntry: (id, activityId, patch) => req('PATCH', `/portfolios/${id}/entries/${activityId}`, patch),
-        async createOutput(id, input) {
-            return (await req<{ runId: string }>('POST', `/portfolios/${id}/outputs`, {
-                targetRole: input.targetRole,
-                jdText: input.jdText,
-                activityIds: input.activityIds,
-            })).runId;
-        },
-        listOutputs: (id) => req('GET', `/portfolios/${id}/outputs`),
-        getOutput: (outputId) => req('GET', `/outputs/${outputId}`),
-        async getArtifacts(id) {
-            // 실제 백엔드는 getPortfolio 에 evidence 만 주므로, 원문은 별도 엔드포인트가 필요.
-            // 지금은 빈 배열(추후 GET /portfolios/{id}/artifacts 추가 시 연결).
-            void id;
-            return [];
-        },
-        publishOutput: (id, outputId) =>
-            req('POST', `/portfolios/${id}/outputs/${outputId}/publish`),
-        async startMatch(id) {
-            return (await req<{ sessionId: string }>('POST', `/portfolios/${id}/match`)).sessionId;
-        },
-        getMatch: (id, sessionId) => req('GET', `/portfolios/${id}/match/${sessionId}`),
-        answerMatch: (id, sessionId, questionId, confirmed, answer) =>
-            req('POST', `/portfolios/${id}/match/${sessionId}/answer`, { questionId, confirmed, answer }),
-    };
-}
+  },
+};
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false';
-const BASE_URL = import.meta.env.VITE_API_BASE ?? '';
+const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') !== 'false';
 
-export const api: Api = USE_MOCK ? createMockApi() : createHttpApi(BASE_URL);
+export const api: Api = USE_MOCK ? mockApi : realApi;
+export const usingMock = USE_MOCK;
