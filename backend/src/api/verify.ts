@@ -80,6 +80,9 @@ export async function verifyConnections(
 export function normalizeTistoryUrl(raw: string): string {
   let u = raw.trim();
   if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
-  // 끝의 슬래시 제거
+  const parsed = new URL(u);
+  if (!/(^|\.)tistory\.com$/i.test(parsed.hostname)) {
+    throw new Error('티스토리 주소가 아닙니다.');
+  }
   return u.replace(/\/+$/, '');
 }
