@@ -1,0 +1,20 @@
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+# 노드
+node_modules/
+# 실행 산출물과 로그
+*.log
+dist/
+build/
+# 시크릿과 자격증명 (write 훅에서도 차단되는 부류)
+.env
+.env.*
+*.pem
+*.key
+credentials
+credentials.*
+# OS
+.DS_Store
