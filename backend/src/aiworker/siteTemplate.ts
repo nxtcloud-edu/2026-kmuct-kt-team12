@@ -107,8 +107,7 @@ function renderExp(e: Experience, recById: Map<string, RecordItem>): string {
   if (e.origin === 'answer') {
     return `<li>${escape(e.text)} <span class="badge">본인 확인</span></li>`;
   }
-  const rec = e.recordIds.map((id) => recById.get(id)).find((r) => r?.url);
-  const link = rec?.url
+const link = rec?.url && /^https?:\/\//i.test(rec.url)
     ? ` <a class="src" href="${escape(rec.url)}" target="_blank" rel="noopener">원본</a>`
     : '';
   return `<li>${escape(e.text)}${link}</li>`;
