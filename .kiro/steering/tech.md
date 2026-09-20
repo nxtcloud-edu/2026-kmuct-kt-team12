@@ -15,13 +15,16 @@ AWS SAM `template.yaml` 하나로 전체 인프라를 기술한다.
 - **Worker Lambda** — 파이프라인 1~5단계. 비동기 호출, 제한 시간 15분. 단계가 직렬이라 함수 하나 안에서 순서대로 돌린다.
 - **DynamoDB 단일 테이블** — 온디맨드. PK는 `PF#{portfolioId}`. 포트폴리오 하나를 Query 한 번으로 읽는다.
 - **S3** — 업로드 파일과 큰 원문. presigned URL로 브라우저에서 직접 업로드(Lambda 요청 크기 제한 회피). 프론트 정적 호스팅도 S3 + CloudFront.
-- **Bedrock Converse API** — Claude 모델. PDF·이미지는 document, image 블록으로 그대로 넘긴다.
+- **LLM 게이트웨이** — 대회가 제공하는 OpenAI 호환 게이트웨이(`LLM_BASE_URL`)로 Claude 를 부른다.
+  Bedrock SDK 를 쓰지 않는다 — 계정에 `bedrock:InvokeModel` 권한이 없다. 모델은 별칭(`bedrock-haiku` 등)으로 지정한다.
+  OpenAI 호환 Chat Completions 에는 document 블록이 없으므로 PDF 를 그대로 넘기는 경로는 없다.
 
 ## AI 호출 규칙
 
-- 모든 AI 호출은 반드시 tool use로 JSON 스키마를 강제한다. 자유 텍스트를 파싱하지 않는다.
+- 모든 AI 호출은 반드시 tool use(`tools` + `tool_choice`)로 JSON 스키마를 강제한다. 자유 텍스트를 파싱하지 않는다.
+- 응답의 `tool_calls[0].function.arguments` 는 객체가 아니라 **JSON 문자열**이다. `JSON.parse` 가 필요하다.
 - 인용문의 위치(start, end)는 AI가 아니라 코드가 `indexOf`로 계산한다.
-- 2단계 추출은 출처별 독립이라 Worker 안에서 Promise.all 병렬(동시 3~4개), Bedrock 호출 한도에 맞춰 동시 수를 제한한다.
+- 2단계 추출은 출처별 독립이라 Worker 안에서 Promise.all 병렬(동시 3~4개), 게이트웨이 rpm 한도(60)에 맞춰 동시 수를 제한한다.
 
 ## 금지
 

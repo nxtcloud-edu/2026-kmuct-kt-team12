@@ -181,48 +181,95 @@ describe('dispatch', () => {
   });
 });
 
-describe('bedrock', () => {
-  it('extractToolInput은 toolUse.input만 읽는다', () => {
+describe('bedrock(게이트웨이)', () => {
+  const ARGS = {
+    system: 's',
+    userText: 'u',
+    maxTokens: 10,
+    tool: { name: 't', description: 'd', schema: { type: 'object' } },
+  };
+  const DEPS = { modelId: 'bedrock-haiku', baseUrl: 'https://gw.test/v1', apiKey: 'sk-test' };
+
+  function okResponse(args: unknown) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { tool_calls: [{ function: { name: 't', arguments: JSON.stringify(args) } }] } }],
+      }),
+    } as unknown as Response;
+  }
+
+  it('extractToolInput은 tool_calls의 arguments(JSON 문자열)만 읽는다', () => {
     const res = {
-      output: { message: { content: [{ text: '무시' }, { toolUse: { name: 't', input: { ok: 1 } } }] } },
+      choices: [
+        {
+          message: {
+            content: '무시할 산문',
+            tool_calls: [{ function: { name: 't', arguments: '{"ok":1}' } }],
+          },
+        },
+      ],
     };
-    expect(extractToolInput(res as any, 't')).toEqual({ ok: 1 });
+    expect(extractToolInput(res, 't')).toEqual({ ok: 1 });
   });
 
-  it('재시도 가능한 예외는 재시도 후 성공', async () => {
+  it('tool_calls가 없으면 던진다 (자유 텍스트를 받아들이지 않는다)', () => {
+    const res = { choices: [{ message: { content: '{"ok":1}' } }] };
+    expect(() => extractToolInput(res, 't')).toThrow('도구 결과를 반환하지 않았습니다');
+  });
+
+  it('요청 본문에 tool_choice로 스키마를 강제한다', async () => {
+    let sent: any;
+    const fetchImpl = vi.fn(async (_url: any, init: any) => {
+      sent = JSON.parse(init.body);
+      return okResponse({ v: 1 });
+    }) as unknown as typeof fetch;
+
+    await converse(ARGS, { ...DEPS, fetchImpl });
+
+    expect((fetchImpl as any).mock.calls[0][0]).toBe('https://gw.test/v1/chat/completions');
+    expect((fetchImpl as any).mock.calls[0][1].headers.Authorization).toBe('Bearer sk-test');
+    expect(sent.model).toBe('bedrock-haiku');
+    expect(sent.tool_choice).toEqual({ type: 'function', function: { name: 't' } });
+    expect(sent.tools[0].function.parameters).toEqual({ type: 'object' });
+    expect(sent.max_tokens).toBe(10);
+  });
+
+  it('429는 재시도 후 성공', async () => {
     let calls = 0;
-    const client = {
-      send: vi.fn(async () => {
-        calls++;
-        if (calls === 1) {
-          const e = new Error('throttled');
-          (e as any).name = 'ThrottlingException';
-          throw e;
-        }
-        return { output: { message: { content: [{ toolUse: { name: 't', input: { v: 2 } } }] } } };
-      }),
-    };
-    const out = await converse<{ v: number }>(
-      { system: 's', userText: 'u', maxTokens: 10, tool: { name: 't', description: 'd', schema: {} } },
-      { modelId: 'us.model', client, makeCommand: (i) => i },
-    );
+    const fetchImpl = (async () => {
+      calls++;
+      if (calls === 1) {
+        return { ok: false, status: 429, text: async () => 'rate limited' } as unknown as Response;
+      }
+      return okResponse({ v: 2 });
+    }) as unknown as typeof fetch;
+
+    const out = await converse<{ v: number }>(ARGS, { ...DEPS, fetchImpl });
     expect(out).toEqual({ v: 2 });
     expect(calls).toBe(2);
   });
 
-  it('재시도 불가 예외는 즉시 던진다', async () => {
-    const client = {
-      send: vi.fn(async () => {
-        const e = new Error('validation');
-        (e as any).name = 'ValidationException';
-        throw e;
-      }),
-    };
+  it('400은 재시도하지 않고 즉시 던진다', async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return { ok: false, status: 400, text: async () => 'bad request' } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await expect(converse(ARGS, { ...DEPS, fetchImpl })).rejects.toThrow('게이트웨이 호출 실패(400)');
+    expect(calls).toBe(1);
+  });
+
+  it('키가 없으면 호출 전에 던진다', async () => {
+    const prev = process.env.LLM_API_KEY;
+    delete process.env.LLM_API_KEY;
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
     await expect(
-      converse(
-        { system: 's', userText: 'u', maxTokens: 10, tool: { name: 't', description: 'd', schema: {} } },
-        { modelId: 'us.model', client, makeCommand: (i) => i },
-      ),
-    ).rejects.toThrow('validation');
+      converse(ARGS, { modelId: 'bedrock-haiku', baseUrl: 'https://gw.test/v1', fetchImpl }),
+    ).rejects.toThrow('LLM_API_KEY');
+    expect((fetchImpl as any).mock.calls.length).toBe(0);
+    if (prev !== undefined) process.env.LLM_API_KEY = prev;
   });
 }, 20000);
