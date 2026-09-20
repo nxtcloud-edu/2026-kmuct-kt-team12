@@ -1,5 +1,6 @@
 // backend/src/api/index.ts
-// api Lambda 엔트리. 동기, HTTP API payload v2. CORS 헤더는 넣지 않는다(API Gateway 설정).
+// api Lambda 엔트리. 동기, HTTP API payload v2.
+// OPTIONS preflight 처리 + 모든 응답에 CORS 헤더 추가.
 // 핸들러 export 이름은 handler.
 
 import { buildRouter } from './routes.js';
@@ -7,6 +8,12 @@ import { configFromEnv } from '../lib/dispatch.js';
 import { createDynamoStore } from '../lib/db.js';
 import { readSiteHtml } from '../lib/s3.js';
 import type { ApiEvent, ApiResult } from './router.js';
+
+const CORS_HEADERS: Record<string, string> = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+  'access-control-allow-headers': 'content-type,authorization',
+};
 
 function env(name: string): string {
   const v = process.env[name];
@@ -30,6 +37,17 @@ function getRouter() {
 }
 
 export async function handler(event: ApiEvent): Promise<ApiResult> {
+  const method = event.requestContext?.http?.method ?? 'GET';
+
+  // CORS preflight
+  if (method === 'OPTIONS') {
+    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+  }
+
   const router = getRouter();
-  return router.handle(event);
+  const result = await router.handle(event);
+
+  // 모든 응답에 CORS 헤더 추가
+  result.headers = { ...result.headers, ...CORS_HEADERS };
+  return result;
 }

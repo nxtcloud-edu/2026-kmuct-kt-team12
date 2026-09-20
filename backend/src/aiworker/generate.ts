@@ -189,9 +189,9 @@ export function validateContent(
     for (const w of englishWords(`${r.title} ${r.body}`)) inputWords.add(w.toLowerCase());
   }
 
-  const skills = content.skills.filter((s) => kwIds.has(s.keywordId));
+  const skills = (content.skills ?? []).filter((s) => kwIds.has(s.keywordId));
 
-  const activities = content.activities
+  const activities = (content.activities ?? [])
     .filter((a) => recIds.has(a.recordId))
     .map((a) => {
       const bullets = a.bullets.filter((b) => {
