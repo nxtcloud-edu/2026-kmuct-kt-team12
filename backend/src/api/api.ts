@@ -5,9 +5,11 @@
 // build/refresh 는 수집(collect)부터 시작하고, 수집이 끝나면 파이프라인을 이어서 부른다.
 
 import type { Deps, JobInvoker } from '../ports.js';
-import type { Source, Run, ActivityEntry } from '../../../shared/types.js';
+import type { Source, Run, ActivityEntry, MatchSession } from '../../../shared/types.js';
 import { prepareFile } from '../collect/collect.js';
 import { isMasterNewer } from '../pipeline/tailor.js';
+import { generateMatchQuestions } from '../pipeline/match.js';
+import { generateStaticPortfolio } from '../pipeline/publish.js';
 
 export interface ApiDeps extends Deps {
     jobs: JobInvoker;
@@ -39,7 +41,7 @@ async function newRun(deps: ApiDeps, portfolioId: string, mode: Run['mode']): Pr
 }
 
 /**
- * 10개 엔드포인트 라우팅.
+ * 13개 엔드포인트 라우팅.
  * POST   /portfolios
  * GET    /portfolios/{id}
  * POST   /portfolios/{id}/sources
@@ -47,8 +49,12 @@ async function newRun(deps: ApiDeps, portfolioId: string, mode: Run['mode']): Pr
  * POST   /portfolios/{id}/runs
  * GET    /runs/{runId}
  * PATCH  /portfolios/{id}/entries/{activityId}
+ * POST   /portfolios/{id}/match                       (경험 매칭 세션 시작)
+ * GET    /portfolios/{id}/match/{sessionId}            (세션 조회)
+ * POST   /portfolios/{id}/match/{sessionId}/answer     (질문 답변)
  * POST   /portfolios/{id}/outputs
  * GET    /portfolios/{id}/outputs
+ * POST   /portfolios/{id}/outputs/{outputId}/publish
  * GET    /outputs/{outputId}
  */
 export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiResponse> {
@@ -140,6 +146,61 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
                 return json(200, merged);
             }
 
+            // /portfolios/{id}/match ... (경험 매칭 챗봇)
+            if (s[2] === 'match') {
+                // POST /portfolios/{id}/match — 매칭 세션 시작 (질문 생성)
+                if (s.length === 3 && m === 'POST') {
+                    const master = await deps.store.getMaster(portfolioId);
+                    if (!master) return json(404, { error: '마스터 없음' });
+                    if (master.entries.length === 0) return json(400, { error: '활동이 없습니다' });
+
+                    const questions = await generateMatchQuestions(master, deps);
+                    const session: MatchSession = {
+                        id: deps.id.next('ms'),
+                        portfolioId,
+                        questions,
+                        status: 'active',
+                        createdAt: deps.clock.now(),
+                    };
+                    await deps.store.putMatchSession(session);
+                    return json(201, { sessionId: session.id });
+                }
+                // GET /portfolios/{id}/match/{sessionId} — 세션 상태 조회
+                if (s.length === 4 && m === 'GET') {
+                    const session = await deps.store.getMatchSession(s[3]);
+                    if (!session || session.portfolioId !== portfolioId) {
+                        return json(404, { error: '매칭 세션 없음' });
+                    }
+                    return json(200, session);
+                }
+                // POST /portfolios/{id}/match/{sessionId}/answer — 질문 답변
+                if (s.length === 5 && s[4] === 'answer' && m === 'POST') {
+                    const session = await deps.store.getMatchSession(s[3]);
+                    if (!session || session.portfolioId !== portfolioId) {
+                        return json(404, { error: '매칭 세션 없음' });
+                    }
+                    const questionId = body.questionId as string;
+                    const confirmed = body.confirmed as boolean;
+                    const answer = body.answer as string | undefined;
+
+                    const q = session.questions.find((x) => x.id === questionId);
+                    if (!q) return json(404, { error: '질문 없음' });
+
+                    q.status = confirmed ? 'confirmed' : 'denied';
+                    if (confirmed && answer) {
+                        q.userAnswer = answer;
+                    }
+
+                    // 모든 질문이 답변되었으면 세션 완료
+                    if (session.questions.every((x) => x.status !== 'pending')) {
+                        session.status = 'done';
+                    }
+
+                    await deps.store.putMatchSession(session);
+                    return json(200, session);
+                }
+            }
+
             // /portfolios/{id}/outputs ...
             if (s[2] === 'outputs') {
                 // POST /portfolios/{id}/outputs (맞춤본 생성 접수)
@@ -167,6 +228,24 @@ export async function handle(req: ApiRequest, deps: ApiDeps): Promise<ApiRespons
                         stale: master ? isMasterNewer(master, t) : false,
                     }));
                     return json(200, summary);
+                }
+
+                // POST /portfolios/{id}/outputs/{outputId}/publish (정적 HTML 발행)
+                if (s.length === 5 && s[4] === 'publish' && m === 'POST') {
+                    const outputId = s[3];
+                    const [tailored, evidence, artifacts] = await Promise.all([
+                        deps.store.getTailored(portfolioId, outputId),
+                        deps.store.getEvidence(portfolioId),
+                        deps.store.getArtifacts(portfolioId),
+                    ]);
+                    if (!tailored) return json(404, { error: '맞춤본 없음' });
+
+                    const html = generateStaticPortfolio(tailored, evidence, artifacts);
+                    const key = `published/${portfolioId}/${outputId}/index.html`;
+                    await deps.blob.putText(key, html);
+                    // 실제 배포 시 CloudFront URL 또는 S3 웹호스팅 URL 로 교체
+                    const url = `https://portfolio.example.com/${key}`;
+                    return json(200, { url });
                 }
             }
         }
