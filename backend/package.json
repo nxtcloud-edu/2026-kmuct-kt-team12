@@ -1,0 +1,30 @@
+{
+  "name": "@kiroton/backend",
+  "version": "0.1.0",
+  "description": "포트폴리오 생성기 백엔드: Lambda 3개(api, collector, ai-worker). 리전 us-east-1 고정.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.658.1",
+    "@aws-sdk/client-lambda": "3.658.1",
+    "@aws-sdk/client-s3": "3.658.1",
+    "@aws-sdk/client-sqs": "3.658.1",
+    "@aws-sdk/lib-dynamodb": "3.658.1",
+    "@aws-sdk/s3-request-presigner": "3.658.1",
+    "@mozilla/readability": "0.5.0",
+    "fast-xml-parser": "4.5.0",
+    "linkedom": "0.18.5"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.163",
+    "@types/node": "22.7.5",
+    "archiver": "7.0.1",
+    "esbuild": "0.24.0",
+    "typescript": "5.6.3",
+    "vitest": "2.1.3"
+  }
+}
