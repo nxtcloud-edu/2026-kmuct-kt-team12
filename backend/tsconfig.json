@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "..",
+    "types": ["node"],
+    "paths": {
+      "@shared/types": ["../shared/types.ts"],
+      "@shared/validators": ["../shared/validators.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "../shared/types.ts", "../shared/validators.ts"]
+}
