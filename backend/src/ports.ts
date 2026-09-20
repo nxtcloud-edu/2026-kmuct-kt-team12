@@ -10,6 +10,7 @@ import type {
     MasterOutput,
     TailoredOutput,
     Run,
+    MatchSession,
 } from '../../shared/types.js';
 
 // ---------- Bedrock (AI) ----------
@@ -68,6 +69,9 @@ export interface StorePort {
     getRun(runId: string): Promise<Run | null>;
     appendEvent(runId: string, message: string): Promise<void>;
     setRunStatus(runId: string, status: Run['status']): Promise<void>;
+
+    putMatchSession(s: MatchSession): Promise<void>;
+    getMatchSession(sessionId: string): Promise<MatchSession | null>;
 }
 
 // ---------- Blob (S3) ----------
@@ -148,6 +152,7 @@ export interface Deps {
         BEDROCK_MODEL_ID: string;
         GITHUB_TOKEN?: string;
         NOTION_TOKEN?: string;
+        TISTORY_TOKEN?: string;
         RAWTEXT_SPILL_LIMIT: number; // 기본 40000
     };
 }

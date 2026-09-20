@@ -3,7 +3,7 @@
 // 정의는 docs/design.md 5장 원문 그대로다. 모듈 공개를 위한 export 키워드만 더했다.
 
 // ---------- 입력 ----------
-export type SourceKind = 'github' | 'notion' | 'web' | 'file';
+export type SourceKind = 'github' | 'notion' | 'tistory' | 'web' | 'file';
 
 export interface Source {
     id: string;
@@ -112,4 +112,22 @@ export interface Run {
     mode: 'build' | 'refresh' | 'tailor';
     status: 'running' | 'done' | 'failed';
     events: { at: string; message: string }[];       // "3개 링크가 하나의 활동으로 합쳐졌습니다"
+}
+
+// ---------- 경험 매칭 (AI 챗봇) ----------
+export interface MatchQuestion {
+    id: string;
+    activityId: string;
+    question: string;
+    suggestedKeyword: string;     // 예: "Database 구현"
+    status: 'pending' | 'confirmed' | 'denied';
+    userAnswer?: string;
+}
+
+export interface MatchSession {
+    id: string;
+    portfolioId: string;
+    questions: MatchQuestion[];
+    status: 'active' | 'done';
+    createdAt: string;
 }

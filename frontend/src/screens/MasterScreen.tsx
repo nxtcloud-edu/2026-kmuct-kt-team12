@@ -63,6 +63,9 @@ export function MasterScreen() {
                     <button className="btn" onClick={onRefresh} disabled={refreshing}>
                         {refreshing ? '갱신 중…' : '다시 불러오기'}
                     </button>
+                    <button className="btn" onClick={() => navigate(`/p/${id}/match`)}>
+                        경험 매칭하기
+                    </button>
                     <button className="btn btn-primary" onClick={() => navigate(`/p/${id}/tailor`)}>
                         직무 맞춤 만들기
                     </button>

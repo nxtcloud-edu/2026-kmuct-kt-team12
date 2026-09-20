@@ -87,6 +87,20 @@ body {
 .checklist li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; background: var(--card); }
 textarea { width: 100%; min-height: 100px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 14px; }
 
+/* 경험 매칭 */
+.match-list { list-style: none; padding: 0; }
+.match-item { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: var(--card); }
+.match-item.match-confirmed { border-left: 3px solid var(--accent); opacity: 0.85; }
+.match-item.match-denied { border-left: 3px solid var(--muted); opacity: 0.6; }
+.match-question { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+.match-keyword { margin-bottom: 8px; }
+.match-input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 8px; }
+.match-answer { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.match-badge { font-size: 12px; padding: 2px 10px; border-radius: 999px; }
+.match-badge.confirmed { background: var(--accent-soft); color: var(--accent); }
+.match-badge.denied { background: var(--gray-empty); color: var(--muted); }
+.match-detail { color: var(--ink); }
+
 /* 인쇄 */
 @media print {
     .topbar, .btn, .btn-row, .banner, .evidence-panel { display: none !important; }

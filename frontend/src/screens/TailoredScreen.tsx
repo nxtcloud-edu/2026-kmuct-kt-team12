@@ -17,6 +17,8 @@ export function TailoredScreen() {
     const [evidence, setEvidence] = useState<Evidence[]>([]);
     const [artifacts, setArtifacts] = useState<Artifact[]>([]);
     const [master, setMaster] = useState<MasterOutput | null>(null);
+    const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+    const [publishing, setPublishing] = useState(false);
 
     useEffect(() => {
         (async () => {
@@ -31,6 +33,25 @@ export function TailoredScreen() {
             setMaster(view.master);
         })();
     }, [id, outputId]);
+
+    const handlePublish = async () => {
+        if (!output) return;
+        setPublishing(true);
+        try {
+            const { url } = await api.publishOutput(id, output.id);
+            setPublishedUrl(url);
+        } catch (e) {
+            alert('발행 실패: ' + (e as Error).message);
+        } finally {
+            setPublishing(false);
+        }
+    };
+
+    const handleCopyUrl = () => {
+        if (publishedUrl) {
+            navigator.clipboard.writeText(publishedUrl).catch(() => {});
+        }
+    };
 
     if (!output) return <div className="container">불러오는 중…</div>;
 
@@ -54,10 +75,28 @@ export function TailoredScreen() {
                     <button className="btn btn-primary" onClick={() => window.print()}>
                         PDF로 내보내기
                     </button>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handlePublish}
+                        disabled={publishing}
+                    >
+                        {publishing ? '발행 중…' : '웹사이트로 발행'}
+                    </button>
                     <button className="btn" onClick={() => navigate(`/p/${id}`)}>
                         마스터로
                     </button>
                 </div>
+
+                {publishedUrl && (
+                    <div className="banner" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+                        <span style={{ wordBreak: 'break-all', fontSize: '13px' }}>
+                            이 URL로 포트폴리오를 공유할 수 있습니다: {publishedUrl}
+                        </span>
+                        <button className="btn" onClick={handleCopyUrl} style={{ flexShrink: 0 }}>
+                            복사
+                        </button>
+                    </div>
+                )}
 
                 <section>
                     <div className="field-label">자기소개</div>

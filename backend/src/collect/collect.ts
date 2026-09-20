@@ -7,6 +7,7 @@ import { sha256 } from '../util.js';
 import { fetchGithub, type FetchResult } from './github.js';
 import { fetchWeb, type HtmlExtractor, basicHtmlExtractor } from './web.js';
 import { fetchNotion } from './notion.js';
+import { fetchTistory } from './tistory.js';
 
 export interface CollectOptions {
     htmlExtractor?: HtmlExtractor;
@@ -25,6 +26,8 @@ export async function fetchSource(
             return fetchWeb(source.url!, deps.http, opts.htmlExtractor ?? basicHtmlExtractor);
         case 'notion':
             return fetchNotion(source.url!, deps.http, deps.env.NOTION_TOKEN);
+        case 'tistory':
+            return fetchTistory(source.url!, deps.http, deps.env.TISTORY_TOKEN);
         case 'file':
             throw new Error('file 종류는 fetchSource 가 아니라 파일 파이프라인으로 처리한다');
     }

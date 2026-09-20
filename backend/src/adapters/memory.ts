@@ -10,6 +10,7 @@ import type {
     MasterOutput,
     TailoredOutput,
     Run,
+    MatchSession,
 } from '../../../shared/types.js';
 
 export class MemoryStore implements StorePort {
@@ -20,6 +21,7 @@ export class MemoryStore implements StorePort {
     private master = new Map<string, MasterOutput>();
     private tailored = new Map<string, Map<string, TailoredOutput>>();
     private runs = new Map<string, Run>();
+    private matchSessions = new Map<string, MatchSession>();
 
     async createPortfolio(portfolioId: string): Promise<void> {
         this.portfolios.add(portfolioId);
@@ -108,6 +110,15 @@ export class MemoryStore implements StorePort {
         const r = this.runs.get(runId);
         if (!r) throw new Error(`run 없음: ${runId}`);
         r.status = status;
+    }
+
+    // ---------- 경험 매칭 세션 ----------
+    async putMatchSession(s: MatchSession): Promise<void> {
+        this.matchSessions.set(s.id, structuredClone(s));
+    }
+    async getMatchSession(sessionId: string): Promise<MatchSession | null> {
+        const s = this.matchSessions.get(sessionId);
+        return s ? structuredClone(s) : null;
     }
 
     // Artifact 는 sourceId 만 갖고 portfolioId 를 직접 안 갖는다.

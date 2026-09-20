@@ -9,6 +9,7 @@ import type {
     MasterOutput,
     TailoredOutput,
     Run,
+    MatchSession,
 } from '@shared/types';
 import {
     fixtureArtifacts,
@@ -45,9 +46,20 @@ export interface Api {
     getOutput(outputId: string): Promise<TailoredOutput>;
     /** 근거 추적: artifact 원문을 얻는다(목 전용/데모). 실제는 getPortfolio 응답에 포함하거나 별도 조회. */
     getArtifacts(id: string): Promise<Artifact[]>;
+    /** 맞춤본을 정적 HTML 웹사이트로 발행한다. */
+    publishOutput(id: string, outputId: string): Promise<{ url: string }>;
+    /** 경험 매칭 세션을 시작한다 (질문 생성). */
+    startMatch(id: string): Promise<string>;
+    /** 매칭 세션 상태를 조회한다. */
+    getMatch(id: string, sessionId: string): Promise<MatchSession>;
+    /** 매칭 질문에 답변한다. */
+    answerMatch(id: string, sessionId: string, questionId: string, confirmed: boolean, answer?: string): Promise<MatchSession>;
 }
 
 // ---------- 목 구현 ----------
+// 목 매칭 세션 저장소
+const mockMatchSessions = new Map<string, MatchSession>();
+
 function delay<T>(v: T, ms = 120): Promise<T> {
     return new Promise((r) => setTimeout(() => r(v), ms));
 }
@@ -122,6 +134,44 @@ export function createMockApi(): Api {
         async getArtifacts() {
             return delay(structuredClone(fixtureArtifacts));
         },
+        async publishOutput(_id, outputId) {
+            return delay({ url: `https://portfolio-demo.s3.amazonaws.com/published/pf-demo/${outputId}/index.html` });
+        },
+        // ---------- 경험 매칭 (목 구현) ----------
+        async startMatch() {
+            const sessionId = `ms-${Date.now()}`;
+            const mockQuestions: MatchSession['questions'] = [
+                { id: 'mq-1', activityId: 'act-crawler', question: '웹 크롤러에서 Database를 사용한 경험이 있나요?', suggestedKeyword: 'Database 구현', status: 'pending' },
+                { id: 'mq-2', activityId: 'act-crawler', question: 'Docker 등 컨테이너 환경에서 배포한 경험이 있나요?', suggestedKeyword: 'Docker 배포', status: 'pending' },
+                { id: 'mq-3', activityId: 'act-study', question: '스터디에서 코드 리뷰를 진행한 경험이 있나요?', suggestedKeyword: '코드 리뷰', status: 'pending' },
+                { id: 'mq-4', activityId: 'act-study', question: '스터디 결과물을 블로그나 깃허브에 정리한 경험이 있나요?', suggestedKeyword: '기술 블로그', status: 'pending' },
+                { id: 'mq-5', activityId: 'act-payment', question: '결제 모듈에서 보안(인증/암호화)을 적용한 경험이 있나요?', suggestedKeyword: '보안 적용', status: 'pending' },
+                { id: 'mq-6', activityId: 'act-payment', question: '프론트엔드에서 사용한 상태관리 라이브러리가 있나요?', suggestedKeyword: '상태관리', status: 'pending' },
+            ];
+            mockMatchSessions.set(sessionId, {
+                id: sessionId,
+                portfolioId: 'pf-demo',
+                questions: mockQuestions,
+                status: 'active',
+                createdAt: new Date().toISOString(),
+            });
+            return delay(sessionId);
+        },
+        async getMatch(_id, sessionId) {
+            const session = mockMatchSessions.get(sessionId);
+            if (!session) throw new Error('세션 없음');
+            return delay(structuredClone(session));
+        },
+        async answerMatch(_id, sessionId, questionId, confirmed, answer) {
+            const session = mockMatchSessions.get(sessionId);
+            if (!session) throw new Error('세션 없음');
+            const q = session.questions.find((x) => x.id === questionId);
+            if (!q) throw new Error('질문 없음');
+            q.status = confirmed ? 'confirmed' : 'denied';
+            if (confirmed && answer) q.userAnswer = answer;
+            if (session.questions.every((x) => x.status !== 'pending')) session.status = 'done';
+            return delay(structuredClone(session));
+        },
     };
 }
 
@@ -164,6 +214,14 @@ export function createHttpApi(baseUrl: string): Api {
             void id;
             return [];
         },
+        publishOutput: (id, outputId) =>
+            req('POST', `/portfolios/${id}/outputs/${outputId}/publish`),
+        async startMatch(id) {
+            return (await req<{ sessionId: string }>('POST', `/portfolios/${id}/match`)).sessionId;
+        },
+        getMatch: (id, sessionId) => req('GET', `/portfolios/${id}/match/${sessionId}`),
+        answerMatch: (id, sessionId, questionId, confirmed, answer) =>
+            req('POST', `/portfolios/${id}/match/${sessionId}/answer`, { questionId, confirmed, answer }),
     };
 }
 

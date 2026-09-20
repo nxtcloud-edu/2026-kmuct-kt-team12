@@ -8,6 +8,7 @@ import { api } from '../api';
 function detectKind(url: string): Source['kind'] {
     if (url.includes('github.com')) return 'github';
     if (url.includes('notion')) return 'notion';
+    if (url.includes('tistory.com')) return 'tistory';
     return 'web';
 }
 
