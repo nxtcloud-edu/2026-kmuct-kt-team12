@@ -12,3 +12,5 @@
 - `.gitignore` 는 `scm.sh init` 기본선을 그대로 쓴다. 의존성 디렉토리와 환경변수·인증서 파일류를 먼저 막는 목적.
 - 포기한 대안: classic branch protection 단독 사용. ruleset 이 GitHub 의 현행 메커니즘이고 이미 저장소에 존재했으므로 그쪽으로 통일했다.
 - 알려진 한계: PR 승인 1명이 필요하므로 혼자서는 `develop` 에 머지할 수 없다. 승인자를 구할 수 없는 상황이 반복되면 승인 수를 0 으로 내리는 것을 검토한다(그 경우 직접 push 는 여전히 막힌다).
+- 위 한계가 바로 발생해 `required_approving_review_count` 를 1 → 0 으로 내렸다. GitHub 은 자기 PR 을 승인할 수 없어 단독 작업이 막힌다. PR 경유 필수와 force push·삭제 금지는 그대로 유지되므로 직접 push 차단은 유효하다. 리뷰 품질은 규칙이 아니라 팀 합의로 지킨다 — 머지 전 팀원 1명 리뷰를 관례로 삼는다.
+- `require_extra_approval_for_unattributed_changes` 는 true 로 남긴다. 커밋 이메일이 GitHub 계정에 연결되지 않은 변경은 승인 수 0 과 무관하게 추가 승인을 요구한다.
